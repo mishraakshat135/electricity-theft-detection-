@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>⚡ Electricity Theft Detection</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1220;
+    --surface: #111a2e;
+    --surface-2: #18243d;
+    --border: #1f2d4a;
+    --text: #e6ecf7;
+    --muted: #8b9bb8;
+    --primary: #0ea5e9;
+    --primary-2: #1e3a8a;
+    --high: #ef4444;
+    --medium: #f59e0b;
+    --low: #10b981;
+    --shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 1.25rem; }
+  header {
+    background: linear-gradient(135deg, var(--primary-2), var(--primary));
+    border-radius: 14px; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem;
+    box-shadow: var(--shadow);
+  }
+  header h1 { margin: 0; font-size: 1.6rem; }
+  header p { margin: .25rem 0 0; opacity: .85; font-size: .9rem; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1rem 1.1rem; box-shadow: var(--shadow);
+  }
+  .upload {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    flex-wrap: wrap; margin-bottom: 1rem;
+  }
+  .upload-left { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+  .file-btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: var(--primary); color: #fff; padding: .55rem 1rem;
+    border-radius: 8px; cursor: pointer; font-weight: 600; border: none;
+  }
+  .file-btn:hover { filter: brightness(1.1); }
+  #fileName { color: var(--muted); font-size: .9rem; }
+  .progress-wrap { width: 100%; margin-top: .75rem; display: none; }
+  .progress { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--primary); transition: width .2s; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .75rem; margin: 1rem 0; }
+  .metric { padding: .9rem 1rem; }
+  .metric .label { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  .metric .value { font-size: 1.6rem; font-weight: 700; margin-top: .25rem; }
+  .metric.high .value { color: var(--high); }
+  .metric.medium .value { color: var(--medium); }
+  .metric.low .value { color: var(--low); }
+
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+  @media (max-width: 800px) { .charts { grid-template-columns: 1fr; } }
+  .chart-card h3 { margin: 0 0 .75rem; font-size: .95rem; }
+  .chart-wrap { position: relative; height: 260px; }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; }
+  .toggle { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 2px; }
+  .toggle button {
+    background: transparent; color: var(--muted); border: none; padding: .35rem .7rem;
+    border-radius: 6px; cursor: pointer; font-size: .8rem;
+  }
+  .toggle button.active { background: var(--primary); color: #fff; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { text-align: left; padding: .55rem .65rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  tbody tr:hover { background: var(--surface-2); }
+  .badge { display: inline-block; padding: .15rem .55rem; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+  .badge.HIGH { background: rgba(239,68,68,.15); color: var(--high); }
+  .badge.MEDIUM { background: rgba(245,158,11,.15); color: var(--medium); }
+  .badge.LOW { background: rgba(16,185,129,.15); color: var(--low); }
+
+  .filter-row { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+  select, .btn {
+    background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: .45rem .75rem; font-size: .9rem; cursor: pointer;
+  }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.1); }
+  .empty { padding: 2rem; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 12px; }
+  .status { color: var(--muted); font-size: .85rem; margin-top: .5rem; }
+  .hidden { display: none !important; }
+  h2 { font-size: 1.05rem; margin: 1.25rem 0 .5rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>⚡ Electricity Theft Detection</h1>
+    <p>Client-side anomaly analysis for utility consumption data</p>
+  </header>
+
+  <div class="card upload">
+    <div class="upload-left">
+      <label class="file-btn">
+        📂 Upload CSV
+        <input id="fileInput" type="file" accept=".csv" hidden />
+      </label>
+      <span id="fileName">No file selected</span>
+    </div>
+    <span class="status" id="status">Expected columns: consumer_id, location, day_1, day_2, …</span>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress"><div id="progressBar"></div></div>
+    </div>
+  </div>
+
+  <div id="empty" class="empty">⬆️ Upload a CSV to populate metrics, charts, and the inspection list.</div>
+
+  <div id="dashboard" class="hidden">
+    <div class="metrics">
+      <div class="card metric"><div class="label">Records Processed</div><div class="value" id="mTotal">0</div></div>
+      <div class="card metric high"><div class="label">High-Risk Consumers</div><div class="value" id="mHigh">0</div></div>
+      <div class="card metric medium"><div class="label">Total Suspicious</div><div class="value" id="mSusp">0</div></div>
+      <div class="card metric low"><div class="label">Estimated Revenue Loss</div><div class="value" id="mLoss">$0</div></div>
+    </div>
+
+    <div class="charts">
+      <div class="card chart-card"><h3>Risk Distribution</h3><div class="chart-wrap"><canvas id="cRisk"></canvas></div></div>
+      <div class="card chart-card"><h3>Detection Reasons</h3><div class="chart-wrap"><canvas id="cReasons"></canvas></div></div>
+      <div class="card chart-card"><h3>Model Confidence Distribution</h3><div class="chart-wrap"><canvas id="cConf"></canvas></div></div>
+      <div class="card chart-card">
+        <div class="toolbar">
+          <h3 style="margin:0">Consumption Trends</h3>
+          <div class="toggle">
+            <button id="tAvg" class="active">Average</button>
+            <button id="tTop">Top 10</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="cTrend"></canvas></div>
+      </div>
+    </div>
+
+    <h2>🚨 Top 10 High-Risk Consumers</h2>
+    <div class="card table-wrap"><table id="topTable"></table></div>
+
+    <h2>📋 Possible Theft Locations</h2>
+    <div class="card">
+      <div class="filter-row">
+        <div>
+          <label for="filter" style="color:var(--muted);font-size:.85rem;margin-right:.4rem">Filter:</label>
+          <select id="filter">
+            <option>All</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option>
+          </select>
+        </div>
+        <button id="downloadBtn" class="btn primary">⬇️ Download CSV</button>
+      </div>
+      <div class="table-wrap"><table id="mainTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const fileName = document.getElementById('fileName');
+const status = document.getElementById('status');
+const progressWrap = document.getElementById('progressWrap');
+const progressBar = document.getElementById('progressBar');
+const empty = document.getElementById('empty');
+const dashboard = document.getElementById('dashboard');
+let STATE = { results: [], dateCols: [], trendMode: 'avg' };
+const charts = {};
+
+const fmt = n => new Intl.NumberFormat('en-US').format(n);
+const fmtCurrency = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
+
+fileInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) { fileName.textContent = f.name; handleFile(f); }
+});
+
+function setProgress(p) {
+  progressWrap.style.display = 'block';
+  progressBar.style.width = (p*100).toFixed(0) + '%';
+  if (p >= 1) setTimeout(() => progressWrap.style.display='none', 400);
+}
+
+async function handleFile(file) {
+  console.log("Uploading file...");
+  setProgress(0.1);
+
+  const start = performance.now();
+
+  const formData = new FormData();
+
+  formData.append("file", file);
+
+  try {
+
+    const response = await fetch(
+      "/predict",
+      {
+        method: "POST",
+        body: formData
+      }
+    );
+
+    const data = await response.json();
+
+    STATE.results = data.results;
+    STATE.dateCols = data.date_columns || [];
+
+    const elapsed =
+      ((performance.now() - start) / 1000)
+      .toFixed(2);
+
+    status.textContent =
+      `Analyzed ${data.total_records} records in ${elapsed}s`;
+
+    setProgress(1);
+
+    render();
+
+  } catch (err) {
+
+    status.textContent =
+      "❌ Backend connection failed"+err.message;
+
+  }
+}
+
+
+
+const round = (n,d=2) => { const f=10**d; return Math.round(n*f)/f; };
+
+function render() {
+  empty.classList.add('hidden');
+  dashboard.classList.remove('hidden');
+  const r = STATE.results;
+  const high = r.filter(x=>x.inspection_priority==='HIGH').length;
+  const susp = r.filter(x=>x.inspection_priority!=='LOW').length;
+  const loss = r.reduce((a,x)=>a+x.estimated_loss,0);
+  document.getElementById('mTotal').textContent = fmt(r.length);
+  document.getElementById('mHigh').textContent = fmt(high);
+  document.getElementById('mSusp').textContent = fmt(susp);
+  document.getElementById('mLoss').textContent = fmtCurrency(loss);
+  drawCharts(); drawTopTable(); drawMainTable();
+}
+
+function drawCharts() {
+  Object.values(charts).forEach(c => c?.destroy());
+  const r = STATE.results;
+  const counts = { HIGH:0, MEDIUM:0, LOW:0 };
+  r.forEach(x => counts[x.inspection_priority]++);
+
+  charts.risk = new Chart(document.getElementById('cRisk'), {
+    type: 'bar',
+    data: { labels: ['HIGH','MEDIUM','LOW'],
+      datasets: [{ data:[counts.HIGH,counts.MEDIUM,counts.LOW],
+        backgroundColor:['#ef4444','#f59e0b','#10b981'], borderRadius: 6 }] },
+    options: chartOpts(false)
+  });
+
+  const reasonMap = new Map();
+  r.filter(x=>x.inspection_priority!=='LOW').forEach(x=>reasonMap.set(x.reason,(reasonMap.get(x.reason)||0)+1));
+  const reasons = [...reasonMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6);
+  charts.reasons = new Chart(document.getElementById('cReasons'), {
+    type: 'bar',
+    data: { labels: reasons.map(x=>x[0]),
+      datasets:[{ data: reasons.map(x=>x[1]), backgroundColor:'#0ea5e9', borderRadius: 6 }] },
+    options: { ...chartOpts(false), indexAxis:'y' }
+  });
+
+  const bins = Array.from({length:10},(_,i)=>({label:`${i*10}-${(i+1)*10}%`, c:0}));
+  r.forEach(x => bins[Math.min(9, Math.floor(x.confidence*10))].c++);
+  charts.conf = new Chart(document.getElementById('cConf'), {
+    type:'bar',
+    data:{ labels: bins.map(b=>b.label),
+      datasets:[{ data: bins.map(b=>b.c), backgroundColor:'#3b82f6', borderRadius: 6 }] },
+    options: chartOpts(false)
+  });
+
+  drawTrend();
+}
+
+function drawTrend() {
+  charts.trend?.destroy();
+  const { dateCols, results, trendMode } = STATE;
+  let datasets;
+  if (trendMode === 'avg') {
+    const avg = (dateCols || []).map((_, i) => {
+      const s = results.reduce((a,r)=>a+(r.consumption[i]||0),0);
+      return results.length ? s/results.length : 0;
+    });
+    datasets = [{ label:'Average', data: avg, borderColor:'#0ea5e9', backgroundColor:'transparent', tension:.3, pointRadius:0, borderWidth:2.5 }];
+  } else {
+    const palette = ['#ef4444','#f59e0b','#10b981','#0ea5e9','#a855f7','#ec4899','#14b8a6','#eab308','#6366f1','#f97316'];
+    datasets = [...results].sort((a,b)=>b.risk_score-a.risk_score).slice(0,10).map((r,i)=>({
+      label: String(r.consumer_id),
+      data: r.consumption, borderColor: palette[i%palette.length],
+      backgroundColor:'transparent', tension:.25, pointRadius:0, borderWidth:1.5
+    }));
+  }
+  charts.trend = new Chart(document.getElementById('cTrend'), {
+    type:'line',
+    data:{ labels: dateCols, datasets },
+    options: chartOpts(trendMode==='top')
+  });
+}
+
+function chartOpts(legend) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: legend, labels:{ color:'#8b9bb8', font:{size:10} } } },
+    scales: {
+      x: { ticks:{ color:'#8b9bb8', font:{size:10} }, grid:{ color:'#1f2d4a' } },
+      y: { ticks:{ color:'#8b9bb8', font:{size:10} }, grid:{ color:'#1f2d4a' } }
+    }
+  };
+}
+
+document.getElementById('tAvg').onclick = () => switchTrend('avg');
+document.getElementById('tTop').onclick = () => switchTrend('top');
+function switchTrend(mode) {
+  STATE.trendMode = mode;
+  document.getElementById('tAvg').classList.toggle('active', mode==='avg');
+  document.getElementById('tTop').classList.toggle('active', mode==='top');
+  drawTrend();
+}
+
+const COLS = ['consumer_id','location','risk_score','inspection_priority','estimated_loss','reason','confidence'];
+
+function rowsToTable(el, rows) {
+  if (!rows.length) { el.innerHTML = '<tbody><tr><td style="padding:1rem;color:var(--muted)">No rows.</td></tr></tbody>'; return; }
+  const head = '<thead><tr>' + COLS.map(c => `<th>${c.replace(/_/g,' ')}</th>`).join('') + '</tr></thead>';
+  const body = '<tbody>' + rows.map(r => '<tr>' + COLS.map(c => {
+    const v = r[c];
+    if (c === 'inspection_priority') return `<td><span class="badge ${v}">${v}</span></td>`;
+    if (c === 'estimated_loss') return `<td>${fmtCurrency(v)}</td>`;
+    if (c === 'risk_score' || c === 'confidence') return `<td>${(v*100).toFixed(1)}%</td>`;
+    return `<td>${v}</td>`;
+  }).join('') + '</tr>').join('') + '</tbody>';
+  el.innerHTML = head + body;
+}
+
+function drawTopTable() {
+  const top = [...STATE.results].sort((a,b)=>b.risk_score-a.risk_score).slice(0,10);
+  rowsToTable(document.getElementById('topTable'), top);
+}
+
+function drawMainTable() {
+  const f = document.getElementById('filter').value;
+  const rows = f === 'All' ? STATE.results : STATE.results.filter(r=>r.inspection_priority===f);
+  rowsToTable(document.getElementById('mainTable'), rows);
+}
+
+document.getElementById('filter').addEventListener('change', drawMainTable);
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const f = document.getElementById('filter').value;
+  const rows = f === 'All' ? STATE.results : STATE.results.filter(r=>r.inspection_priority===f);
+  if (!rows.length) return;
+  const csv = Papa.unparse(rows.map(r => Object.fromEntries(COLS.map(c=>[c,r[c]]))));
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `possible_theft_locations_${f.toLowerCase()}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+</script>
+</body>
+</html>

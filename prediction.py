@@ -120,6 +120,7 @@ def predict_theft(data, model, scaler):
     probabilities = model.predict_proba(X_scaled)
 
     data["theft_probability"] = probabilities[:, 1]
+    data["confidence"] = data["theft_probability"]
 
     data["risk_score"] = (
         data["theft_probability"] * 100
