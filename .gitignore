@@ -1,0 +1,17 @@
+# Large data files
+*.csv
+*.xlsx
+
+# Model files
+*.pkl
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+.env
+
+# Streamlit temp files
+*.log
